@@ -2,12 +2,6 @@ import Image from 'next/image'
 
 import { Button } from '@/components/Button'
 import { Container } from '@/components/Container'
-import logoLaravel from '@/images/logos/laravel.svg'
-import logoMirage from '@/images/logos/mirage.svg'
-import logoStatamic from '@/images/logos/statamic.svg'
-import logoStaticKit from '@/images/logos/statickit.svg'
-import logoTransistor from '@/images/logos/transistor.svg'
-import logoTuple from '@/images/logos/tuple.svg'
 import {Pen} from "lucide-react";
 
 export function Hero() {
@@ -50,7 +44,7 @@ export function Hero() {
           href="https://www.youtube.com/watch?v=dQw4w9WgXcQ"
           variant="outline"
         >
-          <Pen color='#e11d48'/>
+          <Pen color='#e11d48' size={20}/>
           <span className="ml-3">Let's Start Writing</span>
         </Button>
       </div>
