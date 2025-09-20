@@ -1,6 +1,5 @@
 import Link from 'next/link'
-
-import { Button } from '@/components/Button'
+import { Button } from '@/components/ui/button'
 import { TextField } from '@/components/Fields'
 import { Logo } from '@/components/Logo'
 import { SlimLayout } from '@/components/SlimLayout'
