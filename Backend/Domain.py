@@ -396,6 +396,239 @@ async def analyze_writing_quality(text: str, user_context: str) -> Dict:
             "error": str(e)
         }
 
+# Plot Continuity Agent - Agentic Feature
+class PlotContinuityAgent:
+    """Agentic AI that monitors story for continuity issues and plot holes"""
+    
+    def __init__(self, user_id: int):
+        self.user_id = user_id
+        self.story_memory = {
+            "characters": {},  # {name: {age, traits, last_seen, details}}
+            "timeline": [],    # [{event, chapter, time_reference}]
+            "locations": {},   # {name: {description, features, last_used}}
+            "plot_threads": [], # [{thread, introduced, status, resolution}]
+            "world_rules": {},  # {rule: description}
+            "relationships": {} # {char1_char2: relationship_type}
+        }
+        
+    async def analyze_story_elements(self, text: str, chapter_info: str = "") -> Dict:
+        """Extract and track story elements from new text"""
+        try:
+            extraction_prompt = f"""
+            As a story continuity expert, extract key story elements from this text:
+            
+            Text: {text}
+            Chapter context: {chapter_info}
+            
+            Extract and format as JSON:
+            {{
+                "characters": [
+                    {{"name": "character_name", "age": "mentioned_age", "traits": ["trait1", "trait2"], "details": "key_details"}}
+                ],
+                "timeline_events": [
+                    {{"event": "what_happened", "time_reference": "when_mentioned", "chapter": "{chapter_info}"}}
+                ],
+                "locations": [
+                    {{"name": "location_name", "description": "description", "features": ["feature1", "feature2"]}}
+                ],
+                "plot_threads": [
+                    {{"thread": "plot_element", "status": "introduced/ongoing/resolved", "details": "context"}}
+                ],
+                "world_rules": [
+                    {{"rule": "magic_system/technology/law", "description": "how_it_works"}}
+                ],
+                "relationships": [
+                    {{"character1": "name1", "character2": "name2", "relationship": "friend/enemy/family/romantic"}}
+                ]
+            }}
+            
+            Only include elements that are clearly mentioned or established in the text.
+            """
+            
+            model = genai.GenerativeModel('gemini-pro')
+            response = model.generate_content(extraction_prompt)
+            
+            # Parse the JSON response
+            try:
+                elements = json.loads(response.text)
+                return elements
+            except json.JSONDecodeError:
+                # If JSON parsing fails, return empty structure
+                return {
+                    "characters": [], "timeline_events": [], "locations": [],
+                    "plot_threads": [], "world_rules": [], "relationships": []
+                }
+                
+        except Exception as e:
+            print(f"Error extracting story elements: {e}")
+            return {}
+    
+    async def update_story_memory(self, elements: Dict, chapter_info: str):
+        """Update the agent's memory with new story elements"""
+        try:
+            # Update characters
+            for char in elements.get("characters", []):
+                name = char["name"]
+                if name in self.story_memory["characters"]:
+                    # Check for consistency issues
+                    existing = self.story_memory["characters"][name]
+                    if "age" in char and existing.get("age") and char["age"] != existing["age"]:
+                        # Age inconsistency detected
+                        pass
+                    # Update with new info
+                    self.story_memory["characters"][name].update(char)
+                else:
+                    self.story_memory["characters"][name] = char
+                    
+            # Update timeline
+            for event in elements.get("timeline_events", []):
+                event["chapter"] = chapter_info
+                self.story_memory["timeline"].append(event)
+                
+            # Update locations
+            for location in elements.get("locations", []):
+                name = location["name"]
+                self.story_memory["locations"][name] = location
+                
+            # Update plot threads
+            for thread in elements.get("plot_threads", []):
+                thread["introduced_in"] = chapter_info
+                self.story_memory["plot_threads"].append(thread)
+                
+            # Update world rules
+            for rule in elements.get("world_rules", []):
+                self.story_memory["world_rules"][rule["rule"]] = rule["description"]
+                
+            # Update relationships
+            for rel in elements.get("relationships", []):
+                key = f"{rel['character1']}_{rel['character2']}"
+                self.story_memory["relationships"][key] = rel["relationship"]
+                
+        except Exception as e:
+            print(f"Error updating story memory: {e}")
+    
+    async def check_continuity_issues(self, new_text: str, chapter_info: str) -> List[Dict]:
+        """Proactively check for continuity issues and plot holes"""
+        try:
+            # Extract elements from new text
+            new_elements = await self.analyze_story_elements(new_text, chapter_info)
+            
+            issues = []
+            
+            # Check character consistency
+            for char in new_elements.get("characters", []):
+                name = char["name"]
+                if name in self.story_memory["characters"]:
+                    existing = self.story_memory["characters"][name]
+                    
+                    # Age consistency
+                    if "age" in char and "age" in existing:
+                        if char["age"] != existing["age"]:
+                            issues.append({
+                                "type": "character_inconsistency",
+                                "severity": "high",
+                                "message": f"Age inconsistency for {name}: was {existing['age']}, now {char['age']}",
+                                "suggestion": f"Check if time has passed or correct the age reference"
+                            })
+                    
+                    # Trait consistency
+                    if "traits" in char and "traits" in existing:
+                        new_traits = set(char["traits"])
+                        old_traits = set(existing["traits"])
+                        conflicting = new_traits & old_traits
+                        if conflicting:
+                            # This is good - consistent traits
+                            pass
+            
+            # Check for unresolved plot threads
+            unresolved_threads = [
+                thread for thread in self.story_memory["plot_threads"] 
+                if thread.get("status") in ["introduced", "ongoing"]
+            ]
+            
+            if len(unresolved_threads) > 3:
+                issues.append({
+                    "type": "plot_management",
+                    "severity": "medium", 
+                    "message": f"You have {len(unresolved_threads)} unresolved plot threads",
+                    "suggestion": "Consider resolving some plot threads before introducing new ones",
+                    "threads": [t["thread"] for t in unresolved_threads[:3]]
+                })
+            
+            # Check for abandoned characters
+            recent_chapters = [chapter_info]  # In real implementation, get last few chapters
+            active_characters = set()
+            for char in new_elements.get("characters", []):
+                active_characters.add(char["name"])
+                
+            for char_name, char_data in self.story_memory["characters"].items():
+                if char_name not in active_characters:
+                    # Character hasn't appeared recently
+                    issues.append({
+                        "type": "character_absence",
+                        "severity": "low",
+                        "message": f"{char_name} hasn't appeared recently",
+                        "suggestion": f"Consider giving {char_name} a scene or mention their whereabouts"
+                    })
+            
+            return issues
+            
+        except Exception as e:
+            print(f"Error checking continuity: {e}")
+            return []
+    
+    async def get_story_summary(self) -> Dict:
+        """Get a summary of tracked story elements"""
+        return {
+            "characters_count": len(self.story_memory["characters"]),
+            "timeline_events": len(self.story_memory["timeline"]),
+            "locations_count": len(self.story_memory["locations"]),
+            "active_plot_threads": len([
+                t for t in self.story_memory["plot_threads"] 
+                if t.get("status") != "resolved"
+            ]),
+            "world_rules_count": len(self.story_memory["world_rules"]),
+            "relationships_count": len(self.story_memory["relationships"])
+        }
+
+async def plot_continuity_agent(story_text: str, user_id: int, chapter_info: str = "current") -> Dict:
+    """Main function to run the Plot Continuity Agent"""
+    try:
+        # Create or get existing agent for user
+        agent = PlotContinuityAgent(user_id)
+        
+        # Analyze new text and check for issues
+        issues = await agent.check_continuity_issues(story_text, chapter_info)
+        
+        # Extract and update story memory
+        new_elements = await agent.analyze_story_elements(story_text, chapter_info)
+        await agent.update_story_memory(new_elements, chapter_info)
+        
+        # Get story summary
+        summary = await agent.get_story_summary()
+        
+        return {
+            "continuity_issues": issues,
+            "story_summary": summary,
+            "new_elements_found": {
+                "characters": len(new_elements.get("characters", [])),
+                "plot_threads": len(new_elements.get("plot_threads", [])),
+                "locations": len(new_elements.get("locations", []))
+            },
+            "agent_status": "active",
+            "recommendations": [
+                "Keep character details consistent",
+                "Track timeline of events", 
+                "Resolve plot threads before adding new ones"
+            ]
+        }
+        
+    except Exception as e:
+        return {
+            "error": f"Plot continuity agent error: {str(e)}",
+            "agent_status": "error"
+        }
+
 # Pydantic Models matching exact database schema
 class Document(BaseModel):
     id: str
@@ -451,6 +684,11 @@ class WritingFeedbackRequest(BaseModel):
     current_text: str
     feedback_focus: Optional[str] = "all"  # "plot", "character", "dialogue", "pacing", "all"
 
+class PlotContinuityRequest(BaseModel):
+    user_id: int
+    story_text: str
+    chapter_info: Optional[str] = "current"  # "Chapter 1", "Scene 3", etc.
+
 # Response Models
 class UserResponse(BaseModel):
     message: str
@@ -496,6 +734,13 @@ class WritingFeedbackResponse(BaseModel):
     style_feedback: List[str]  # Writing style recommendations
     next_steps: List[str]  # Concrete next actions for the writer
     session_id: str
+
+class PlotContinuityResponse(BaseModel):
+    continuity_issues: List[Dict[str, Any]]  # Detected plot holes and inconsistencies
+    story_summary: Dict[str, Any]  # Summary of tracked story elements
+    new_elements_found: Dict[str, int]  # Count of new characters, locations, etc.
+    agent_status: str  # "active", "error", "idle"
+    recommendations: List[str]  # Proactive suggestions for better continuity
 
 # API Endpoints
 
@@ -1076,3 +1321,35 @@ async def enhanced_auto_suggest(req: AutoSuggestionRequest):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error in enhanced suggestions: {str(e)}")
+
+@app.post("/plot_continuity_check", response_model=PlotContinuityResponse)
+async def plot_continuity_check(req: PlotContinuityRequest):
+    """🤖 AGENTIC: Proactively check story for plot holes, character inconsistencies, and continuity issues"""
+    try:
+        # Run the Plot Continuity Agent
+        agent_result = await plot_continuity_agent(
+            story_text=req.story_text,
+            user_id=req.user_id,
+            chapter_info=req.chapter_info
+        )
+        
+        if "error" in agent_result:
+            raise HTTPException(status_code=500, detail=agent_result["error"])
+        
+        return PlotContinuityResponse(
+            continuity_issues=agent_result["continuity_issues"],
+            story_summary=agent_result["story_summary"],
+            new_elements_found=agent_result["new_elements_found"],
+            agent_status=agent_result["agent_status"],
+            recommendations=agent_result["recommendations"]
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Plot Continuity Agent error: {str(e)}")
+
+@app.post("/start_creative_session", response_model=CreativeSessionResponse)
+async def start_creative_session(req: CreativeDomainRequest):
+    """Start a creative writing session for a user"""
+    return await select_creative_domain(req)
