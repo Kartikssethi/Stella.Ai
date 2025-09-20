@@ -398,21 +398,211 @@ async def analyze_writing_quality(text: str, user_context: str) -> Dict:
 
 # Plot Continuity Agent - Agentic Feature
 class PlotContinuityAgent:
-    """Agentic AI that monitors story for continuity issues and plot holes"""
+    """Database-backed agentic AI that monitors story for continuity issues and plot holes"""
     
-    def __init__(self, user_id: int):
-        self.user_id = user_id
-        self.story_memory = {
-            "characters": {},  # {name: {age, traits, last_seen, details}}
-            "timeline": [],    # [{event, chapter, time_reference}]
-            "locations": {},   # {name: {description, features, last_used}}
-            "plot_threads": [], # [{thread, introduced, status, resolution}]
-            "world_rules": {},  # {rule: description}
-            "relationships": {} # {char1_char2: relationship_type}
+    def __init__(self, supabase_client):
+        self.supabase = supabase_client
+        
+    async def add_story_context(self, document_id: str, content: str, chapter_title: str = None):
+        """Add story content and create agent task for analysis"""
+        
+        # Create document if it doesn't exist
+        existing_doc = self.supabase.table("document").select("*").eq("id", document_id).execute()
+        if not existing_doc.data:
+            self.supabase.table("document").insert({
+                "id": document_id,
+                "title": chapter_title or "Story Content",
+                "type": "story",
+                "description": content[:500] + "..." if len(content) > 500 else content,
+                "created_by": "user",
+                "created_at": datetime.utcnow().isoformat(),
+                "updated_at": datetime.utcnow().isoformat()
+            }).execute()
+        
+        # Create agent task for story analysis
+        task_id = str(uuid.uuid4())
+        task = {
+            "id": task_id,
+            "document_id": document_id,
+            "task_type": "story_context_added",
+            "status": "completed",
+            "result": {
+                "content": content,
+                "chapter_title": chapter_title,
+                "timestamp": datetime.utcnow().isoformat(),
+                "length": len(content)
+            },
+            "created_at": datetime.utcnow().isoformat(),
+            "updated_at": datetime.utcnow().isoformat()
         }
         
-    async def analyze_story_elements(self, text: str, chapter_info: str = "") -> Dict:
+        self.supabase.table("agent_task").insert(task).execute()
+        return task_id
+    
+    async def analyze_continuity(self, document_id: str, new_content: str) -> dict:
+        """Analyze plot continuity by checking against previous story content"""
+        
+        # Get all previous story context for this document
+        existing_tasks = self.supabase.table("agent_task").select("*").eq("document_id", document_id).eq("task_type", "story_context_added").execute()
+        
+        # Build story history
+        story_history = []
+        for task in existing_tasks.data:
+            if task.get("result"):
+                story_history.append({
+                    "content": task["result"].get("content", ""),
+                    "chapter_title": task["result"].get("chapter_title"),
+                    "timestamp": task["result"].get("timestamp")
+                })
+        
+        # Sort by timestamp
+        story_history.sort(key=lambda x: x["timestamp"] if x["timestamp"] else "")
+        
+        # Create analysis task
+        analysis_task_id = str(uuid.uuid4())
+        
+        try:
+            # Perform continuity analysis using Gemini
+            analysis_result = await self._perform_continuity_analysis(story_history, new_content)
+            
+            # Store analysis result
+            task = {
+                "id": analysis_task_id,
+                "document_id": document_id,
+                "task_type": "plot_continuity_check",
+                "status": "completed",
+                "result": {
+                    "analysis": analysis_result,
+                    "new_content": new_content,
+                    "story_history_count": len(story_history),
+                    "timestamp": datetime.utcnow().isoformat()
+                },
+                "created_at": datetime.utcnow().isoformat(),
+                "updated_at": datetime.utcnow().isoformat()
+            }
+            
+            self.supabase.table("agent_task").insert(task).execute()
+            return analysis_result
+            
+        except Exception as e:
+            # Store failed analysis
+            task = {
+                "id": analysis_task_id,
+                "document_id": document_id,
+                "task_type": "plot_continuity_check",
+                "status": "failed",
+                "result": {
+                    "error": str(e),
+                    "timestamp": datetime.utcnow().isoformat()
+                },
+                "created_at": datetime.utcnow().isoformat(),
+                "updated_at": datetime.utcnow().isoformat()
+            }
+            
+            self.supabase.table("agent_task").insert(task).execute()
+            raise e
+    
+    async def _perform_continuity_analysis(self, story_history: list, new_content: str) -> dict:
+        """Perform actual continuity analysis using Gemini"""
+        
+        # Build context for AI analysis
+        context = "STORY HISTORY:\n"
+        for i, chapter in enumerate(story_history, 1):
+            title = chapter.get("chapter_title", f"Chapter {i}")
+            context += f"\n=== {title} ===\n{chapter['content']}\n"
+        
+        context += f"\n=== NEW CONTENT ===\n{new_content}\n"
+        
+        prompt = f"""You are a professional story editor analyzing plot continuity. 
+
+{context}
+
+Please analyze the NEW CONTENT against the STORY HISTORY and identify:
+
+1. **Character Consistency**: Are characters behaving consistently with their established personalities, abilities, and backgrounds?
+2. **Timeline Issues**: Are there any timeline inconsistencies or logical sequence problems?
+3. **Plot Continuity**: Are there unresolved plot threads, contradictions, or missing connections?
+4. **World Building**: Are the rules, settings, and established facts consistent?
+
+Provide your analysis in this JSON format:
+{{
+    "issues_found": [
+        {{
+            "type": "character_consistency|timeline|plot_continuity|world_building",
+            "severity": "low|medium|high",
+            "description": "Clear description of the issue",
+            "suggestion": "Specific suggestion to fix the issue"
+        }}
+    ],
+    "positive_elements": [
+        "Things that work well and maintain good continuity"
+    ],
+    "overall_assessment": "Brief overall assessment of continuity quality"
+}}"""
+
+        try:
+            model = genai.GenerativeModel('gemini-pro')
+            response = model.generate_content(prompt)
+            
+            # Extract JSON from response
+            response_text = response.text.strip()
+            if response_text.startswith("```json"):
+                response_text = response_text[7:-3]
+            elif response_text.startswith("```"):
+                response_text = response_text[3:-3]
+            
+            analysis = json.loads(response_text)
+            return analysis
+            
+        except json.JSONDecodeError:
+            # Fallback if JSON parsing fails
+            return {
+                "issues_found": [],
+                "positive_elements": ["Analysis completed but response format was invalid"],
+                "overall_assessment": f"Raw analysis: {response.text[:500]}..."
+            }
+    
+    async def get_continuity_history(self, document_id: str) -> list:
+        """Get all continuity check history for a document"""
+        
+        tasks = self.supabase.table("agent_task").select("*").eq("document_id", document_id).eq("task_type", "plot_continuity_check").order("created_at", desc=True).execute()
+        
+        history = []
+        for task in tasks.data:
+            if task.get("result"):
+                history.append({
+                    "id": task["id"],
+                    "timestamp": task["created_at"],
+                    "status": task["status"],
+                    "analysis": task["result"].get("analysis", {}),
+                    "story_history_count": task["result"].get("story_history_count", 0)
+                })
+        
+        return history
+    
+    async def get_story_timeline(self, document_id: str) -> list:
+        """Get complete story timeline for a document"""
+        
+        tasks = self.supabase.table("agent_task").select("*").eq("document_id", document_id).eq("task_type", "story_context_added").order("created_at").execute()
+        
+        timeline = []
+        for task in tasks.data:
+            if task.get("result"):
+                timeline.append({
+                    "timestamp": task["created_at"],
+                    "chapter_title": task["result"].get("chapter_title"),
+                    "content_length": task["result"].get("length", 0),
+                    "content_preview": task["result"].get("content", "")[:200] + "..."
+                })
+        
+        return timeline
+    
+    async def analyze_story_elements(self, document_id: str, text: str, chapter_info: str = "") -> Dict:
         """Extract and track story elements from new text"""
+        
+        # Create analysis task
+        task_id = str(uuid.uuid4())
+        
         try:
             extraction_prompt = f"""
             As a story continuity expert, extract key story elements from this text:
@@ -451,182 +641,151 @@ class PlotContinuityAgent:
             # Parse the JSON response
             try:
                 elements = json.loads(response.text)
+                
+                # Store successful element extraction
+                task = {
+                    "id": task_id,
+                    "document_id": document_id,
+                    "task_type": "story_element_extraction",
+                    "status": "completed",
+                    "result": {
+                        "elements": elements,
+                        "text_length": len(text),
+                        "chapter_info": chapter_info,
+                        "timestamp": datetime.utcnow().isoformat()
+                    },
+                    "created_at": datetime.utcnow().isoformat(),
+                    "updated_at": datetime.utcnow().isoformat()
+                }
+                
+                self.supabase.table("agent_task").insert(task).execute()
                 return elements
+                
             except json.JSONDecodeError:
-                # If JSON parsing fails, return empty structure
-                return {
+                # Store failed element extraction
+                elements = {
                     "characters": [], "timeline_events": [], "locations": [],
                     "plot_threads": [], "world_rules": [], "relationships": []
                 }
                 
+                task = {
+                    "id": task_id,
+                    "document_id": document_id,
+                    "task_type": "story_element_extraction",
+                    "status": "failed",
+                    "result": {
+                        "error": "JSON parsing failed",
+                        "raw_response": response.text[:500],
+                        "timestamp": datetime.utcnow().isoformat()
+                    },
+                    "created_at": datetime.utcnow().isoformat(),
+                    "updated_at": datetime.utcnow().isoformat()
+                }
+                
+                self.supabase.table("agent_task").insert(task).execute()
+                return elements
+                
         except Exception as e:
-            print(f"Error extracting story elements: {e}")
+            # Store failed analysis
+            task = {
+                "id": task_id,
+                "document_id": document_id,
+                "task_type": "story_element_extraction",
+                "status": "failed",
+                "result": {
+                    "error": str(e),
+                    "timestamp": datetime.utcnow().isoformat()
+                },
+                "created_at": datetime.utcnow().isoformat(),
+                "updated_at": datetime.utcnow().isoformat()
+            }
+            
+            self.supabase.table("agent_task").insert(task).execute()
             return {}
     
-    async def update_story_memory(self, elements: Dict, chapter_info: str):
-        """Update the agent's memory with new story elements"""
-        try:
-            # Update characters
-            for char in elements.get("characters", []):
-                name = char["name"]
-                if name in self.story_memory["characters"]:
-                    # Check for consistency issues
-                    existing = self.story_memory["characters"][name]
-                    if "age" in char and existing.get("age") and char["age"] != existing["age"]:
-                        # Age inconsistency detected
-                        pass
-                    # Update with new info
-                    self.story_memory["characters"][name].update(char)
-                else:
-                    self.story_memory["characters"][name] = char
-                    
-            # Update timeline
-            for event in elements.get("timeline_events", []):
-                event["chapter"] = chapter_info
-                self.story_memory["timeline"].append(event)
+    async def get_story_summary(self, document_id: str) -> Dict:
+        """Get a summary of tracked story elements for a document"""
+        
+        # Get all element extraction tasks for this document
+        tasks = self.supabase.table("agent_task").select("*").eq("document_id", document_id).eq("task_type", "story_element_extraction").execute()
+        
+        # Aggregate all story elements
+        all_characters = set()
+        all_locations = set()
+        timeline_events = 0
+        plot_threads = 0
+        world_rules = 0
+        relationships = 0
+        
+        for task in tasks.data:
+            if task.get("result") and task["result"].get("elements"):
+                elements = task["result"]["elements"]
                 
-            # Update locations
-            for location in elements.get("locations", []):
-                name = location["name"]
-                self.story_memory["locations"][name] = location
+                for char in elements.get("characters", []):
+                    all_characters.add(char.get("name", "Unknown"))
                 
-            # Update plot threads
-            for thread in elements.get("plot_threads", []):
-                thread["introduced_in"] = chapter_info
-                self.story_memory["plot_threads"].append(thread)
+                for loc in elements.get("locations", []):
+                    all_locations.add(loc.get("name", "Unknown"))
                 
-            # Update world rules
-            for rule in elements.get("world_rules", []):
-                self.story_memory["world_rules"][rule["rule"]] = rule["description"]
-                
-            # Update relationships
-            for rel in elements.get("relationships", []):
-                key = f"{rel['character1']}_{rel['character2']}"
-                self.story_memory["relationships"][key] = rel["relationship"]
-                
-        except Exception as e:
-            print(f"Error updating story memory: {e}")
-    
-    async def check_continuity_issues(self, new_text: str, chapter_info: str) -> List[Dict]:
-        """Proactively check for continuity issues and plot holes"""
-        try:
-            # Extract elements from new text
-            new_elements = await self.analyze_story_elements(new_text, chapter_info)
-            
-            issues = []
-            
-            # Check character consistency
-            for char in new_elements.get("characters", []):
-                name = char["name"]
-                if name in self.story_memory["characters"]:
-                    existing = self.story_memory["characters"][name]
-                    
-                    # Age consistency
-                    if "age" in char and "age" in existing:
-                        if char["age"] != existing["age"]:
-                            issues.append({
-                                "type": "character_inconsistency",
-                                "severity": "high",
-                                "message": f"Age inconsistency for {name}: was {existing['age']}, now {char['age']}",
-                                "suggestion": f"Check if time has passed or correct the age reference"
-                            })
-                    
-                    # Trait consistency
-                    if "traits" in char and "traits" in existing:
-                        new_traits = set(char["traits"])
-                        old_traits = set(existing["traits"])
-                        conflicting = new_traits & old_traits
-                        if conflicting:
-                            # This is good - consistent traits
-                            pass
-            
-            # Check for unresolved plot threads
-            unresolved_threads = [
-                thread for thread in self.story_memory["plot_threads"] 
-                if thread.get("status") in ["introduced", "ongoing"]
-            ]
-            
-            if len(unresolved_threads) > 3:
-                issues.append({
-                    "type": "plot_management",
-                    "severity": "medium", 
-                    "message": f"You have {len(unresolved_threads)} unresolved plot threads",
-                    "suggestion": "Consider resolving some plot threads before introducing new ones",
-                    "threads": [t["thread"] for t in unresolved_threads[:3]]
-                })
-            
-            # Check for abandoned characters
-            recent_chapters = [chapter_info]  # In real implementation, get last few chapters
-            active_characters = set()
-            for char in new_elements.get("characters", []):
-                active_characters.add(char["name"])
-                
-            for char_name, char_data in self.story_memory["characters"].items():
-                if char_name not in active_characters:
-                    # Character hasn't appeared recently
-                    issues.append({
-                        "type": "character_absence",
-                        "severity": "low",
-                        "message": f"{char_name} hasn't appeared recently",
-                        "suggestion": f"Consider giving {char_name} a scene or mention their whereabouts"
-                    })
-            
-            return issues
-            
-        except Exception as e:
-            print(f"Error checking continuity: {e}")
-            return []
-    
-    async def get_story_summary(self) -> Dict:
-        """Get a summary of tracked story elements"""
+                timeline_events += len(elements.get("timeline_events", []))
+                plot_threads += len(elements.get("plot_threads", []))
+                world_rules += len(elements.get("world_rules", []))
+                relationships += len(elements.get("relationships", []))
+        
         return {
-            "characters_count": len(self.story_memory["characters"]),
-            "timeline_events": len(self.story_memory["timeline"]),
-            "locations_count": len(self.story_memory["locations"]),
-            "active_plot_threads": len([
-                t for t in self.story_memory["plot_threads"] 
-                if t.get("status") != "resolved"
-            ]),
-            "world_rules_count": len(self.story_memory["world_rules"]),
-            "relationships_count": len(self.story_memory["relationships"])
+            "characters_count": len(all_characters),
+            "characters": list(all_characters),
+            "locations_count": len(all_locations),
+            "locations": list(all_locations),
+            "timeline_events": timeline_events,
+            "plot_threads": plot_threads,
+            "world_rules_count": world_rules,
+            "relationships_count": relationships,
+            "analysis_tasks_completed": len([t for t in tasks.data if t["status"] == "completed"])
         }
 
-async def plot_continuity_agent(story_text: str, user_id: int, chapter_info: str = "current") -> Dict:
-    """Main function to run the Plot Continuity Agent"""
+async def plot_continuity_agent(story_text: str, document_id: str, chapter_info: str = "current") -> Dict:
+    """Main function to run the Plot Continuity Agent with database persistence"""
     try:
-        # Create or get existing agent for user
-        agent = PlotContinuityAgent(user_id)
+        # Create agent with database connection
+        agent = PlotContinuityAgent(supabase)
         
-        # Analyze new text and check for issues
-        issues = await agent.check_continuity_issues(story_text, chapter_info)
+        # Add story context to database
+        await agent.add_story_context(document_id, story_text, chapter_info)
         
-        # Extract and update story memory
-        new_elements = await agent.analyze_story_elements(story_text, chapter_info)
-        await agent.update_story_memory(new_elements, chapter_info)
+        # Analyze continuity against previous story content
+        continuity_analysis = await agent.analyze_continuity(document_id, story_text)
+        
+        # Extract story elements for tracking
+        story_elements = await agent.analyze_story_elements(document_id, story_text, chapter_info)
         
         # Get story summary
-        summary = await agent.get_story_summary()
+        summary = await agent.get_story_summary(document_id)
         
         return {
-            "continuity_issues": issues,
+            "continuity_analysis": continuity_analysis,
             "story_summary": summary,
             "new_elements_found": {
-                "characters": len(new_elements.get("characters", [])),
-                "plot_threads": len(new_elements.get("plot_threads", [])),
-                "locations": len(new_elements.get("locations", []))
+                "characters": len(story_elements.get("characters", [])),
+                "plot_threads": len(story_elements.get("plot_threads", [])),
+                "locations": len(story_elements.get("locations", [])),
+                "timeline_events": len(story_elements.get("timeline_events", []))
             },
             "agent_status": "active",
+            "document_id": document_id,
             "recommendations": [
-                "Keep character details consistent",
-                "Track timeline of events", 
-                "Resolve plot threads before adding new ones"
+                "Review continuity analysis for potential issues",
+                "Track character development across chapters", 
+                "Monitor plot thread resolution",
+                "Maintain consistent world-building rules"
             ]
         }
         
     except Exception as e:
         return {
             "error": f"Plot continuity agent error: {str(e)}",
-            "agent_status": "error"
+            "agent_status": "error",
+            "document_id": document_id
         }
 
 # Pydantic Models matching exact database schema
@@ -643,6 +802,16 @@ class User(BaseModel):
     id: str
     name: str
     email: str
+    created_at: datetime
+    updated_at: datetime
+
+class AgentTask(BaseModel):
+    id: str
+    document_id: Optional[str] = None
+    section_id: Optional[str] = None  
+    task_type: str  # "plot_continuity_check", "story_analysis", "auto_suggestion", etc.
+    status: str     # "pending", "in_progress", "completed", "failed"
+    result: Optional[Dict[str, Any]] = None
     created_at: datetime
     updated_at: datetime
 
@@ -685,7 +854,7 @@ class WritingFeedbackRequest(BaseModel):
     feedback_focus: Optional[str] = "all"  # "plot", "character", "dialogue", "pacing", "all"
 
 class PlotContinuityRequest(BaseModel):
-    user_id: int
+    document_id: str  # ID of the story document
     story_text: str
     chapter_info: Optional[str] = "current"  # "Chapter 1", "Scene 3", etc.
 
@@ -736,10 +905,11 @@ class WritingFeedbackResponse(BaseModel):
     session_id: str
 
 class PlotContinuityResponse(BaseModel):
-    continuity_issues: List[Dict[str, Any]]  # Detected plot holes and inconsistencies
+    continuity_analysis: Dict[str, Any]  # Detailed continuity analysis from agent
     story_summary: Dict[str, Any]  # Summary of tracked story elements
     new_elements_found: Dict[str, int]  # Count of new characters, locations, etc.
     agent_status: str  # "active", "error", "idle"
+    document_id: str  # ID of the story document
     recommendations: List[str]  # Proactive suggestions for better continuity
 
 # API Endpoints
@@ -1326,10 +1496,10 @@ async def enhanced_auto_suggest(req: AutoSuggestionRequest):
 async def plot_continuity_check(req: PlotContinuityRequest):
     """🤖 AGENTIC: Proactively check story for plot holes, character inconsistencies, and continuity issues"""
     try:
-        # Run the Plot Continuity Agent
+        # Run the Plot Continuity Agent with database persistence
         agent_result = await plot_continuity_agent(
             story_text=req.story_text,
-            user_id=req.user_id,
+            document_id=req.document_id,
             chapter_info=req.chapter_info
         )
         
@@ -1337,10 +1507,11 @@ async def plot_continuity_check(req: PlotContinuityRequest):
             raise HTTPException(status_code=500, detail=agent_result["error"])
         
         return PlotContinuityResponse(
-            continuity_issues=agent_result["continuity_issues"],
+            continuity_analysis=agent_result["continuity_analysis"],
             story_summary=agent_result["story_summary"],
             new_elements_found=agent_result["new_elements_found"],
             agent_status=agent_result["agent_status"],
+            document_id=agent_result["document_id"],
             recommendations=agent_result["recommendations"]
         )
         
@@ -1348,6 +1519,73 @@ async def plot_continuity_check(req: PlotContinuityRequest):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Plot Continuity Agent error: {str(e)}")
+
+@app.get("/agent_tasks/{document_id}")
+async def get_agent_tasks(document_id: str, task_type: Optional[str] = None):
+    """Get all agent tasks for a document, optionally filtered by task type"""
+    try:
+        query = supabase.table("agent_task").select("*").eq("document_id", document_id)
+        
+        if task_type:
+            query = query.eq("task_type", task_type)
+            
+        tasks = query.order("created_at", desc=True).execute()
+        
+        return {
+            "document_id": document_id,
+            "task_count": len(tasks.data),
+            "tasks": tasks.data
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error retrieving agent tasks: {str(e)}")
+
+@app.get("/agent_continuity_history/{document_id}")
+async def get_continuity_history(document_id: str):
+    """Get continuity check history for a document"""
+    try:
+        agent = PlotContinuityAgent(supabase)
+        history = await agent.get_continuity_history(document_id)
+        
+        return {
+            "document_id": document_id,
+            "history_count": len(history),
+            "continuity_history": history
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error retrieving continuity history: {str(e)}")
+
+@app.get("/agent_story_timeline/{document_id}")
+async def get_story_timeline(document_id: str):
+    """Get story timeline for a document"""
+    try:
+        agent = PlotContinuityAgent(supabase)
+        timeline = await agent.get_story_timeline(document_id)
+        
+        return {
+            "document_id": document_id,
+            "timeline_count": len(timeline),
+            "story_timeline": timeline
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error retrieving story timeline: {str(e)}")
+
+@app.get("/agent_story_summary/{document_id}")
+async def get_agent_story_summary(document_id: str):
+    """Get story summary from agent analysis"""
+    try:
+        agent = PlotContinuityAgent(supabase)
+        summary = await agent.get_story_summary(document_id)
+        
+        return {
+            "document_id": document_id,
+            "story_summary": summary
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error retrieving story summary: {str(e)}")
 
 @app.post("/start_creative_session", response_model=CreativeSessionResponse)
 async def start_creative_session(req: CreativeDomainRequest):
