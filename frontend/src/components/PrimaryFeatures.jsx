@@ -14,27 +14,27 @@ import screenshotVatReturns from '@/images/screenshots/vat-returns.png'
 
 const features = [
   {
-    title: 'Payroll',
+    title: 'Creative Writing',
     description:
-      "Keep track of everyone's salaries and whether or not they've been paid. Direct deposit not supported.",
+      "Unleash ideas with AI that helps craft compelling stories, poems, and narratives.",
     image: screenshotPayroll,
   },
   {
-    title: 'Claim expenses',
+    title: 'Legal Research',
     description:
-      "All of your receipts organized into one place, as long as you don't mind typing in the data by hand.",
+      "Get precise, structured, and reliable legal writing tailored to your needs.",
     image: screenshotExpenses,
   },
   {
-    title: 'VAT handling',
+    title: 'Technical Writing',
     description:
-      "We only sell our software to companies who don't deal with VAT at all, so technically we do all the VAT stuff they need.",
+      "Simplify complex concepts into clear, professional, and reader-friendly documents.",
     image: screenshotVatReturns,
   },
   {
-    title: 'Reporting',
+    title: 'Realtime Suggestions & Corrections',
     description:
-      'Easily export your data into an Excel spreadsheet where you can do whatever the hell you want with it.',
+      'Polish your writing instantly with smart feedback on grammar, tone, and clarity.',
     image: screenshotReporting,
   },
 ]
@@ -74,11 +74,11 @@ export function PrimaryFeatures() {
       <Container className="relative">
         <div className="max-w-2xl md:mx-auto md:text-center xl:max-w-none">
           <h2 className="font-display text-3xl tracking-tight text-white sm:text-4xl md:text-5xl">
-            Everything you need to run your books.
+            Your AI co-writer for creativity, clarity, and credibility.
+            
           </h2>
           <p className="mt-6 text-lg tracking-tight text-rose-100">
-            Well everything you need if you aren’t that picky about minor
-            details like tax compliance.
+            Your all-in-one writing assistant — crafted for imagination, accuracy, and depth.
           </p>
         </div>
         <Tab.Group

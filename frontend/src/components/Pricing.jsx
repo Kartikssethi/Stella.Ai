@@ -119,43 +119,41 @@ export function Pricing() {
           <Plan
             name="Starter"
             price="$9"
-            description="Good for anyone who is self-employed and just getting started."
+            description="Ideal for personal projects and occasional writing tasks."
             href="/register"
             features={[
-              'Send 10 quotes and invoices',
-              'Connect up to 2 bank accounts',
-              'Track up to 15 expenses per month',
-              'Manual payroll support',
-              'Export up to 3 reports',
+              'Generate up to 10 creative drafts per month',
+              'Access basic grammar and style corrections',
+              'Save and export up to 3 documents',
             ]}
           />
+
           <Plan
             featured
-            name="Small business"
+            name="Professional"
             price="$15"
-            description="Perfect for small / medium sized businesses."
+            description="Perfect for freelancers and professionals who write frequently."
             href="/register"
             features={[
-              'Send 25 quotes and invoices',
-              'Connect up to 5 bank accounts',
-              'Track up to 50 expenses per month',
-              'Automated payroll support',
-              'Export up to 12 reports',
-              'Bulk reconcile transactions',
-              'Track in multiple currencies',
+              'Unlimited creative, legal, and technical writing drafts',
+              'Advanced grammar, tone, and style corrections',
+              'Real-time suggestions while typing',
+              'Save and organize documents in folders',
+              'Export documents in multiple formats (PDF, Word)',
             ]}
           />
+
           <Plan
             name="Enterprise"
             price="$39"
-            description="For even the biggest enterprise companies."
+            description="For teams and organizations needing collaborative writing power."
             href="/register"
             features={[
-              'Send unlimited quotes and invoices',
-              'Connect up to 15 bank accounts',
-              'Track up to 200 expenses per month',
-              'Automated payroll support',
-              'Export up to 25 reports, including TPS',
+              'Team collaboration with shared documents',
+              'Custom templates and style guides',
+              'Advanced legal and technical research assistance',
+              'Priority support and onboarding',
+              'Unlimited document storage and exports',
             ]}
           />
         </div>

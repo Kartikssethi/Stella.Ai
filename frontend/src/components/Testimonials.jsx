@@ -11,19 +11,19 @@ const testimonials = [
   [
     {
       content:
-        'TaxPal is so easy to use I can’t help but wonder if it’s really doing the things the government expects me to do.',
+        'The creative mode is a game-changer. I used it to draft story ideas and poems, and it really sparks inspiration when I get stuck.',
       author: {
         name: 'Sheryl Berge',
-        role: 'CEO at Lynch LLC',
+        role: 'Aspiring Author',
         image: avatarImage1,
       },
     },
     {
       content:
-        'I’m trying to get a hold of someone in support, I’m in a lot of trouble right now and they are saying it has something to do with my books. Please get back to me right away.',
+        'I had to review a legal agreement and the app helped me clean up the wording and make it professional in minutes.',
       author: {
-        name: 'Amy Hahn',
-        role: 'Director at Velocity Industries',
+        name: 'Amit Shah',
+        role: 'Startup Founder',
         image: avatarImage4,
       },
     },
@@ -31,19 +31,19 @@ const testimonials = [
   [
     {
       content:
-        'The best part about TaxPal is every time I pay my employees, my bank balance doesn’t go down like it used to. Looking forward to spending this extra cash when I figure out why my card is being declined.',
+        'Technical writing has always been tough for me, but the assistant made my documentation clear and structured without sounding robotic.',
       author: {
         name: 'Leland Kiehn',
-        role: 'Founder of Kiehn and Sons',
+        role: 'Software Engineer',
         image: avatarImage5,
       },
     },
     {
       content:
-        'There are so many things I had to do with my old software that I just don’t do at all with TaxPal. Suspicious but I can’t say I don’t love it.',
+        'The real-time suggestions are so useful. It’s like having an editor on my shoulder fixing grammar, tone, and clarity instantly.',
       author: {
         name: 'Erin Powlowski',
-        role: 'COO at Armstrong Inc',
+        role: 'Graduate Student',
         image: avatarImage2,
       },
     },
@@ -51,24 +51,26 @@ const testimonials = [
   [
     {
       content:
-        'I used to have to remit tax to the EU and with TaxPal I somehow don’t have to do that anymore. Nervous to travel there now though.',
+        'I love how I can switch between creative, legal, and research writing depending on my task. It feels like three tools in one.',
       author: {
         name: 'Peter Renolds',
-        role: 'Founder of West Inc',
+        role: 'Freelance Writer',
         image: avatarImage3,
       },
     },
     {
       content:
-        'This is the fourth email I’ve sent to your support team. I am literally being held in jail for tax fraud. Please answer your damn emails, this is important.',
+        'The interface is clean and simple, but the output feels polished and professional. It saves me hours every week.',
       author: {
-        name: 'Amy Hahn',
-        role: 'Director at Velocity Industries',
+        name: 'Neha Gupta',
+        role: 'Legal Research Assistant',
         image: avatarImage4,
       },
     },
   ],
 ]
+
+
 
 function QuoteIcon(props) {
   return (

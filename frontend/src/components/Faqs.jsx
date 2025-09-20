@@ -6,56 +6,55 @@ import backgroundImage from '@/images/background-faqs.jpg'
 const faqs = [
   [
     {
-      question: 'Does TaxPal handle VAT?',
+      question: 'Can I really switch between Creative, Legal, and Research writing?',
       answer:
-        'Well no, but if you move your company offshore you can probably ignore it.',
+        'Yes! Just pick your mode and the AI adapts instantly to give you the right tone and style.',
     },
     {
-      question: 'Can I pay for my subscription via purchase order?',
-      answer: 'Absolutely, we are happy to take your money in all forms.',
+      question: 'Does the app correct my grammar and spelling too?',
+      answer: 'Absolutely — you get realtime suggestions and corrections as you write.',
     },
     {
-      question: 'How do I apply for a job at TaxPal?',
+      question: 'Can I use this for both short notes and long documents?',
       answer:
-        'We only hire our customers, so subscribe for a minimum of 6 months and then let’s talk.',
+        'Of course! Whether it’s a quick paragraph or a full report, the AI scales with your writing.',
     },
   ],
   [
     {
-      question: 'What was that testimonial about tax fraud all about?',
+      question: 'Is this safe for legal or academic work?',
       answer:
-        'TaxPal is just a software application, ultimately your books are your responsibility.',
+        'We aim for accuracy and structure, but you should always verify critical legal or research content.',
     },
     {
-      question:
-        'TaxPal sounds horrible but why do I still feel compelled to purchase?',
+      question: 'Can I collaborate with teammates on the same document?',
       answer:
-        'This is the power of excellent visual design. You just can’t resist it, no matter how poorly it actually functions.',
+        'Not yet — but collaboration features are on our roadmap for future updates.',
     },
     {
-      question:
-        'I found other companies called TaxPal, are you sure you can use this name?',
+      question: 'Do I need prior writing skills to use this?',
       answer:
-        'Honestly not sure at all. We haven’t actually incorporated or anything, we just thought it sounded cool and made this website.',
+        'Not at all. Our AI helps beginners sound professional and lets experts polish their drafts faster.',
     },
   ],
   [
     {
-      question: 'How do you generate reports?',
+      question: 'What makes your AI different from normal grammar checkers?',
       answer:
-        'You just tell us what data you need a report for, and we get our kids to create beautiful charts for you using only the finest crayons.',
+        'Unlike basic grammar tools, our AI rewrites with context — whether creative flair, legal precision, or technical clarity.',
     },
     {
-      question: 'Can we expect more inventory features?',
-      answer: 'In life it’s really better to never expect anything at all.',
+      question: 'Does it work in realtime or only after finishing a draft?',
+      answer: 'Both — you can get live suggestions while typing or run a full check at the end.',
     },
     {
-      question: 'I lost my password, how do I get into my account?',
+      question: 'Is there a free version I can try before subscribing?',
       answer:
-        'Send us an email and we will send you a copy of our latest password spreadsheet so you can find your information.',
+        'Yes, we offer a free trial so you can explore all modes before committing.',
     },
   ],
 ]
+
 
 export function Faqs() {
   return (
