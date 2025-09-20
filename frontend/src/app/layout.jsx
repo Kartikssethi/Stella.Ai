@@ -5,12 +5,13 @@ import '@/styles/tailwind.css'
 
 export const metadata = {
   title: {
-    template: '%s - TaxPal',
-    default: 'TaxPal - Accounting made simple for small businesses',
+    template: '%s - Stella AI',
+    default: 'Stella AI',
   },
   description:
-    'Most bookkeeping software is accurate, but hard to use. We make the opposite trade-off, and hope you don’t get audited.',
+    'Stella AI helps you draft, refine, and perfect your writing across creative, legal, and technical domains—effortlessly and in real time.',
 }
+
 
 const inter = Inter({
   subsets: ['latin'],
