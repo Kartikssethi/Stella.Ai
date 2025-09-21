@@ -1,0 +1,137 @@
+# Stella.AI - Creative Writing Assistant Requirements
+# Install with: pip install -r requirements.txt
+
+# Core Web Framework
+fastapi==0.116.2
+uvicorn==0.36.0
+starlette==0.48.0
+
+# Data Validation & Models
+pydantic==2.11.9
+pydantic_core==2.33.2
+
+# Database & Backend
+supabase==2.19.0
+postgrest==2.19.0
+realtime==2.19.0
+storage3==2.19.0
+supabase-auth==2.19.0
+supabase-functions==2.19.0
+psycopg2-binary==2.9.9
+SQLAlchemy==2.0.43
+asyncpg==0.30.0
+databases==0.9.0
+
+# AI & Machine Learning
+google-generativeai==0.8.5
+google-ai-generativelanguage==0.6.15
+google-api-core==2.25.1
+google-api-python-client==2.182.0
+google-auth==2.40.3
+google-auth-httplib2==0.2.0
+googleapis-common-protos==1.70.0
+
+# HTTP & Networking
+httpx==0.28.1
+httpcore==1.0.9
+aiohttp==3.12.15
+aiohappyeyeballs==2.6.1
+aiosignal==1.4.0
+requests==2.32.5
+urllib3==2.5.0
+
+# Authentication & Security
+PyJWT==2.10.1
+cryptography==46.0.1
+certifi==2025.8.3
+
+# Environment & Configuration
+python-dotenv==1.1.1
+
+# Async & Concurrency
+anyio==4.10.0
+async-timeout==5.0.1
+asyncio
+
+# Data Processing & Parsing
+beautifulsoup4==4.13.5
+lxml==6.0.1
+soupsieve==2.8
+
+# Caching & Storage
+redis==6.4.0
+
+# Protocol Buffers & gRPC
+protobuf==5.29.5
+proto-plus==1.26.1
+grpcio==1.75.0
+grpcio-status==1.71.2
+
+# HTTP/2 Support
+h11==0.16.0
+h2==4.3.0
+hpack==4.1.0
+hyperframe==6.1.0
+
+# Utilities
+click==8.1.8
+tqdm==4.67.1
+packaging==25.0
+deprecation==2.1.0
+sniffio==1.3.1
+
+# Type Annotations & Validation
+typing_extensions==4.15.0
+typing-inspection==0.4.1
+annotated-types==0.7.0
+
+# String & Text Processing
+pyparsing==3.2.4
+StrEnum==0.4.15
+idna==3.10
+charset-normalizer==3.4.3
+
+# Networking & WebSockets
+websockets==15.0.1
+yarl==1.20.1
+multidict==6.6.4
+frozenlist==1.7.0
+propcache==0.3.2
+attrs==25.3.0
+
+# Caching & Performance
+cachetools==5.5.2
+
+# Crypto & Security
+pyasn1==0.6.1
+pyasn1_modules==0.4.2
+rsa==4.9.1
+cffi==2.0.0
+pycparser==2.23
+
+# API & Template Utilities
+uritemplate==4.2.0
+httplib2==0.31.0
+
+# Error Handling
+exceptiongroup==1.3.0
+
+# Python 3.9+ Support Note:
+# This project requires Python 3.9 or higher
+# Make sure you're using Python 3.9.6 or later
+
+# Installation Instructions for your teammates:
+# 1. Create a virtual environment: python -m venv venv
+# 2. Activate it: source venv/bin/activate (Mac/Linux) or venv\Scripts\activate (Windows)
+# 3. Install dependencies: pip install -r requirements.txt
+# 4. Create a .env file with your API keys:
+#    SUPABASE_URL=your_supabase_url
+#    SUPABASE_KEY=your_supabase_key  
+#    GEMINI_API_KEY=your_gemini_api_key
+# 5. Run the server: python -m uvicorn Domain:app --reload --port 8000
+
+# Development Dependencies (optional):
+# pytest==7.4.0
+# pytest-asyncio==0.21.0
+# black==23.7.0
+# flake8==6.0.0
