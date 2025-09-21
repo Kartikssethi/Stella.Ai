@@ -3,10 +3,11 @@
 import { useEditor, EditorContent } from "@tiptap/react"
 import StarterKit from "@tiptap/starter-kit"
 import { Placeholder } from '@tiptap/extensions'
-import { useState, useCallback, useRef } from "react"
+import { useState, useCallback, useRef, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
 import { SuggestionOverlay } from "@/components/suggestion-overlay"
+import { useRealtimeSuggestions } from "@/hooks/use-realtime-suggestions"
 import { writingApi } from "@/lib/api"
 import {
     Bold,
@@ -32,10 +33,24 @@ export function EnhancedTipTapEditor({
     sessionId,
     documentId,
 }) {
-    const [suggestions, setSuggestions] = useState([])
-    const [isLoadingSuggestions, setIsLoadingSuggestions] = useState(false)
-    const debounceRef = useRef()
+    const [paragraphs, setParagraphs] = useState([])
+    const [activeParagraphId, setActiveParagraphId] = useState(null)
+    const [suggestionPosition, setSuggestionPosition] = useState({ x: 0, y: 0 })
     const editorRef = useRef(null)
+    const paragraphRefs = useRef({})
+
+    // Use the real-time suggestions hook
+    const {
+        fetchSuggestions,
+        getSuggestions,
+        clearSuggestions,
+        acceptSuggestion,
+        rejectSuggestion,
+        applySuggestion,
+        getParagraphAnalysis,
+        isLoading: isLoadingSuggestions,
+        error: suggestionsError
+    } = useRealtimeSuggestions(userId, sessionId)
 
     const editor = useEditor({
         extensions: [
@@ -47,7 +62,7 @@ export function EnhancedTipTapEditor({
         onUpdate: ({ editor }) => {
             const newContent = editor.getHTML()
             onChange(newContent)
-            debouncedGetSuggestions(newContent)
+            updateParagraphs(newContent)
         },
         editorProps: {
             attributes: {
@@ -57,138 +72,90 @@ export function EnhancedTipTapEditor({
         },
     })
 
-
-    const debouncedGetSuggestions = useCallback(
-        (text) => {
-            if (debounceRef.current) {
-                clearTimeout(debounceRef.current)
-            }
-
-            debounceRef.current = setTimeout(async () => {
-                await getSuggestionsForContent(text)
-            }, 1000)
-        },
-        [userId, sessionId]
-    )
-
-    const getSuggestionsForContent = async (text) => {
-        if (!text.trim() || text.length < 50) return
-
-        setIsLoadingSuggestions(true)
-        try {
-            const paragraphs = extractParagraphs(text)
-            const newSuggestions = []
-
-            for (let i = 0; i < paragraphs.length; i++) {
-                const paragraph = paragraphs[i]
-                if (paragraph.trim().length > 20) {
-                    const response = await writingApi.getAutoSuggestions({
-                        user_id: userId,
-                        session_id: sessionId,
-                        current_text: paragraph,
-                        document_context: documentId || undefined,
-                    })
-
-                    if (response.suggestions && response.suggestions.length > 0) {
-                        const position = getParagraphPosition(i)
-                        newSuggestions.push({
-                            id: `${i}-${Date.now()}`,
-                            text: response.suggestions[0],
-                            type: response.suggestion_type,
-                            confidence: response.confidence_score,
-                            position,
-                            paragraphIndex: i,
-                        })
-                    }
-                }
-            }
-
-            setSuggestions(newSuggestions)
-        } catch (error) {
-            console.error("[v0] Error getting suggestions:", error)
-        } finally {
-            setIsLoadingSuggestions(false)
-        }
-    }
-
-    const extractParagraphs = (htmlContent) => {
+    // Update paragraphs when content changes
+    const updateParagraphs = useCallback((htmlContent) => {
         const tempDiv = document.createElement("div")
         tempDiv.innerHTML = htmlContent
-        const paragraphs = tempDiv.querySelectorAll("p")
-        return Array.from(paragraphs).map((p) => p.textContent || "")
-    }
-
-    const getParagraphPosition = (paragraphIndex) => {
-        if (!editorRef.current) return { top: 0, left: 0 }
-
-        const paragraphs = editorRef.current.querySelectorAll("p")
-        if (paragraphs[paragraphIndex]) {
-            const rect = paragraphs[paragraphIndex].getBoundingClientRect()
-            const editorRect = editorRef.current.getBoundingClientRect()
+        const paragraphElements = tempDiv.querySelectorAll("p")
+        
+        const newParagraphs = Array.from(paragraphElements).map((p, index) => {
+            const text = p.textContent || ""
+            const paragraphId = `paragraph-${index}-${text.slice(0, 20).replace(/\s/g, '-')}`
+            
             return {
-                top: rect.top - editorRect.top,
-                left: rect.right - editorRect.left + 20,
+                id: paragraphId,
+                text,
+                index,
+                element: p
             }
-        }
-        return { top: 0, left: 0 }
-    }
-
-    const handleAcceptSuggestion = (suggestionId) => {
-        const suggestion = suggestions.find((s) => s.id === suggestionId)
-        if (!suggestion || !editor) return
-
-        try {
-            const currentContent = editor.getHTML()
-            const tempDiv = document.createElement("div")
-            tempDiv.innerHTML = currentContent
-
-            const paragraphs = tempDiv.querySelectorAll("p")
-            const targetParagraph = paragraphs[suggestion.paragraphIndex]
-
-            if (targetParagraph) {
-                const currentText = targetParagraph.textContent || ""
-                const needsSpace =
-                    currentText.length > 0 && !currentText.endsWith(" ")
-                targetParagraph.innerHTML += `${needsSpace ? " " : ""}${suggestion.text
-                    }`
-
-                editor.commands.setContent(tempDiv.innerHTML)
-                setTimeout(() => {
-                    editor.commands.focus("end")
-                }, 100)
-            }
-        } catch (error) {
-            console.error("[v0] Error accepting suggestion:", error)
-            const currentContent = editor.getHTML()
-            editor.commands.setContent(currentContent + ` ${suggestion.text}`)
-        }
-
-        setSuggestions((prev) => prev.filter((s) => s.id !== suggestionId))
-
-        console.log("[v0] Suggestion accepted:", {
-            suggestionId,
-            type: suggestion.type,
-            confidence: suggestion.confidence,
-            userId,
-            sessionId,
         })
-    }
+        
+        setParagraphs(newParagraphs)
+    }, [])
 
-    const handleRejectSuggestion = (suggestionId) => {
-        const suggestion = suggestions.find((s) => s.id === suggestionId)
+    // Handle paragraph click to show suggestions
+    const handleParagraphClick = useCallback((paragraphId, event) => {
+        const paragraph = paragraphs.find(p => p.id === paragraphId)
+        if (!paragraph || !paragraph.text.trim()) return
 
-        if (suggestion) {
-            console.log("[v0] Suggestion rejected:", {
-                suggestionId,
-                type: suggestion.type,
-                confidence: suggestion.confidence,
-                userId,
-                sessionId,
+        // Calculate position for suggestion overlay
+        const rect = event.currentTarget.getBoundingClientRect()
+        const editorRect = editorRef.current?.getBoundingClientRect()
+        
+        if (editorRect) {
+            setSuggestionPosition({
+                x: rect.right - editorRect.left + 20,
+                y: rect.top - editorRect.top
             })
         }
 
-        setSuggestions((prev) => prev.filter((s) => s.id !== suggestionId))
-    }
+        setActiveParagraphId(paragraphId)
+        
+        // Fetch suggestions for this paragraph
+        fetchSuggestions(paragraphId, paragraph.text)
+    }, [paragraphs, fetchSuggestions])
+
+    // Handle suggestion actions
+    const handleAcceptSuggestion = useCallback((suggestion) => {
+        acceptSuggestion(activeParagraphId, suggestion.id)
+        console.log("Suggestion accepted:", suggestion)
+    }, [activeParagraphId, acceptSuggestion])
+
+    const handleRejectSuggestion = useCallback((suggestion) => {
+        rejectSuggestion(activeParagraphId, suggestion.id)
+        console.log("Suggestion rejected:", suggestion)
+    }, [activeParagraphId, rejectSuggestion])
+
+    const handleApplySuggestion = useCallback((suggestion) => {
+        if (!editor) return
+        
+        const paragraph = paragraphs.find(p => p.id === activeParagraphId)
+        if (!paragraph) return
+
+        const appliedText = applySuggestion(activeParagraphId, suggestion.id, paragraph.text)
+        
+        // Update the editor content with the applied suggestion
+        const currentContent = editor.getHTML()
+        const tempDiv = document.createElement("div")
+        tempDiv.innerHTML = currentContent
+        
+        const paragraphElements = tempDiv.querySelectorAll("p")
+        const targetParagraph = paragraphElements[paragraph.index]
+        
+        if (targetParagraph) {
+            targetParagraph.innerHTML = appliedText
+            editor.commands.setContent(tempDiv.innerHTML)
+        }
+        
+        console.log("Suggestion applied:", suggestion)
+    }, [activeParagraphId, applySuggestion, editor, paragraphs])
+
+    // Initialize paragraphs when content changes
+    useEffect(() => {
+        if (content) {
+            updateParagraphs(content)
+        }
+    }, [content, updateParagraphs])
 
     if (!editor) {
         return null
@@ -313,14 +280,37 @@ export function EnhancedTipTapEditor({
                 <div className="max-w-4xl mx-auto relative">
                     <EditorContent editor={editor} />
 
-                    {suggestions.map((suggestion) => (
-                        <SuggestionOverlay
-                            key={suggestion.id}
-                            suggestion={suggestion}
-                            onAccept={() => handleAcceptSuggestion(suggestion.id)}
-                            onReject={() => handleRejectSuggestion(suggestion.id)}
-                        />
-                    ))}
+                    {/* Render paragraphs with click handlers */}
+                    {paragraphs.map((paragraph) => {
+                        const suggestions = getSuggestions(paragraph.id)
+                        const analysis = getParagraphAnalysis(paragraph.id)
+                        
+                        return (
+                            <div key={paragraph.id}>
+                                {/* Paragraph click area for suggestions */}
+                                <div
+                                    className="cursor-pointer hover:bg-muted/20 rounded p-1 -m-1 transition-colors"
+                                    onClick={(e) => handleParagraphClick(paragraph.id, e)}
+                                    title="Click for AI suggestions"
+                                >
+                                    {/* This will be handled by the editor content */}
+                                </div>
+                                
+                                {/* Show suggestion overlay for active paragraph */}
+                                {activeParagraphId === paragraph.id && suggestions && (
+                                    <SuggestionOverlay
+                                        paragraphId={paragraph.id}
+                                        paragraphText={paragraph.text}
+                                        position={suggestionPosition}
+                                        onAccept={handleAcceptSuggestion}
+                                        onReject={handleRejectSuggestion}
+                                        onApplySuggestion={handleApplySuggestion}
+                                        isVisible={true}
+                                    />
+                                )}
+                            </div>
+                        )
+                    })}
                 </div>
             </div>
         </div>

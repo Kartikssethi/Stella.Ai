@@ -7,17 +7,21 @@ import { ArrowLeft, Save } from "lucide-react"
 import { EnhancedTipTapEditor } from "@/components/EnhancedTipTapEditor"
 
 
-export function EditorArea({ document, onUpdateDocument, onClose }) {
+export function EditorArea({ document, onUpdateDocument, onClose, sessionId: propSessionId, userId }) {
   const [title, setTitle] = useState(document.title)
   const [content, setContent] = useState(document.content)
   const [isSaving, setIsSaving] = useState(false)
-  const [sessionId, setSessionId] = useState("")
+  const [sessionId, setSessionId] = useState(propSessionId || "")
 
   useEffect(() => {
     setTitle(document.title)
     setContent(document.content)
-    setSessionId(`session-${document.id}-${Date.now()}`)
-  }, [document])
+    if (propSessionId) {
+      setSessionId(propSessionId)
+    } else {
+      setSessionId(`session-${document.id}-${Date.now()}`)
+    }
+  }, [document, propSessionId])
 
   const handleSave = async () => {
     setIsSaving(true)
@@ -63,7 +67,7 @@ export function EditorArea({ document, onUpdateDocument, onClose }) {
           content={content}
           onChange={handleContentChange}
           placeholder="Start writing your document here..."
-          userId={document.createdBy || "user-1"} 
+          userId={userId || document.createdBy || "user-1"} 
           sessionId={sessionId}
           documentId={document.id}
         />
