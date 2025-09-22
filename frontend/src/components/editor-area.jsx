@@ -67,7 +67,7 @@ export function EditorArea({ document, onUpdateDocument, onClose, sessionId: pro
           content={content}
           onChange={handleContentChange}
           placeholder="Start writing your document here..."
-          userId={userId || document.createdBy || "user-1"} 
+          userId={userId || document.createdBy || "test-user"} 
           sessionId={sessionId}
           documentId={document.id}
         />

@@ -15,7 +15,9 @@ class WritingAPI {
 
     if (!response.ok) {
       const errorText = await response.text()
-      throw new Error(`API request failed: ${response.statusText} - ${errorText}`)
+      throw new Error(
+        `API request failed: ${response.statusText} - ${errorText}`,
+      )
     }
 
     return response.json()
@@ -86,6 +88,13 @@ class WritingAPI {
     })
   }
 
+  async getLiveSuggestions(requestData) {
+    return this.request('/live_suggestions', {
+      method: 'POST',
+      body: JSON.stringify(requestData),
+    })
+  }
+
   async getWritingAssist(requestData) {
     return this.request('/writing_assist', {
       method: 'POST',
@@ -125,7 +134,7 @@ class WritingAPI {
 
   // Agent Tasks
   async getAgentTasks(documentId, taskType = null) {
-    const endpoint = taskType 
+    const endpoint = taskType
       ? `/agent_tasks/${documentId}?task_type=${taskType}`
       : `/agent_tasks/${documentId}`
     return this.request(endpoint)

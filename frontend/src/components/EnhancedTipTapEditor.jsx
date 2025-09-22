@@ -6,9 +6,8 @@ import { Placeholder } from '@tiptap/extensions'
 import { useState, useCallback, useRef, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
-import { SuggestionOverlay } from "@/components/suggestion-overlay"
-import { useRealtimeSuggestions } from "@/hooks/use-realtime-suggestions"
-import { writingApi } from "@/lib/api"
+import { useLiveSuggestions } from "@/hooks/use-live-suggestions"
+import { LiveSuggestionsOverlay } from "@/components/live-suggestions-overlay"
 import {
     Bold,
     Italic,
@@ -33,24 +32,30 @@ export function EnhancedTipTapEditor({
     sessionId,
     documentId,
 }) {
-    const [paragraphs, setParagraphs] = useState([])
-    const [activeParagraphId, setActiveParagraphId] = useState(null)
     const [suggestionPosition, setSuggestionPosition] = useState({ x: 0, y: 0 })
     const editorRef = useRef(null)
-    const paragraphRefs = useRef({})
 
-    // Use the real-time suggestions hook
+    // Always ensure we have a userId (fallback for testing)
+    const effectiveUserId = userId || "demo-user"
+    
+    console.log('TipTap Editor initialized with userId:', effectiveUserId)
+
+    // Use the new live suggestions hook
     const {
-        fetchSuggestions,
-        getSuggestions,
-        clearSuggestions,
-        acceptSuggestion,
-        rejectSuggestion,
-        applySuggestion,
-        getParagraphAnalysis,
+        suggestions,
         isLoading: isLoadingSuggestions,
-        error: suggestionsError
-    } = useRealtimeSuggestions(userId, sessionId)
+        showSuggestions,
+        selectedSuggestionIndex,
+        fetchLiveSuggestions,
+        hideSuggestions,
+        acceptSuggestion,
+        navigateSuggestions
+    } = useLiveSuggestions(effectiveUserId)
+
+    // Test: Show some dummy suggestions for debugging
+    useEffect(() => {
+        console.log('Current suggestions state:', { suggestions, showSuggestions, isLoadingSuggestions })
+    }, [suggestions, showSuggestions, isLoadingSuggestions])
 
     const editor = useEditor({
         extensions: [
@@ -62,7 +67,22 @@ export function EnhancedTipTapEditor({
         onUpdate: ({ editor }) => {
             const newContent = editor.getHTML()
             onChange(newContent)
-            updateParagraphs(newContent)
+            
+            // Trigger live suggestions on content change (like GitHub Copilot)
+            const text = editor.getText()
+            const cursorPosition = editor.state.selection.anchor
+            
+            console.log('Editor updated:', { text: text.slice(0, 50), cursorPosition, userId: effectiveUserId })
+            
+            // Trigger suggestions for any text input (more aggressive)
+            if (text.trim().length > 2 && effectiveUserId) {
+                console.log('Triggering live suggestions for text:', text.slice(-20))
+                fetchLiveSuggestions(text, cursorPosition)
+            }
+        },
+        onSelectionUpdate: ({ editor }) => {
+            // Update suggestion position when cursor moves
+            updateSuggestionPosition(editor)
         },
         editorProps: {
             attributes: {
@@ -72,90 +92,47 @@ export function EnhancedTipTapEditor({
         },
     })
 
-    // Update paragraphs when content changes
-    const updateParagraphs = useCallback((htmlContent) => {
-        const tempDiv = document.createElement("div")
-        tempDiv.innerHTML = htmlContent
-        const paragraphElements = tempDiv.querySelectorAll("p")
-        
-        const newParagraphs = Array.from(paragraphElements).map((p, index) => {
-            const text = p.textContent || ""
-            const paragraphId = `paragraph-${index}-${text.slice(0, 20).replace(/\s/g, '-')}`
+    // Update suggestion position based on cursor location
+    const updateSuggestionPosition = useCallback((editor) => {
+        if (!editor || !editorRef.current) return
+
+        try {
+            const { from } = editor.state.selection
+            const coords = editor.view.coordsAtPos(from)
+            const editorRect = editorRef.current.getBoundingClientRect()
             
-            return {
-                id: paragraphId,
-                text,
-                index,
-                element: p
-            }
-        })
-        
-        setParagraphs(newParagraphs)
+            setSuggestionPosition({
+                x: coords.left - editorRect.left + 20,
+                y: coords.top - editorRect.top + 20
+            })
+        } catch (error) {
+            console.error('Error updating suggestion position:', error)
+        }
     }, [])
 
-    // Handle paragraph click to show suggestions
-    const handleParagraphClick = useCallback((paragraphId, event) => {
-        const paragraph = paragraphs.find(p => p.id === paragraphId)
-        if (!paragraph || !paragraph.text.trim()) return
-
-        // Calculate position for suggestion overlay
-        const rect = event.currentTarget.getBoundingClientRect()
-        const editorRect = editorRef.current?.getBoundingClientRect()
-        
-        if (editorRect) {
-            setSuggestionPosition({
-                x: rect.right - editorRect.left + 20,
-                y: rect.top - editorRect.top
-            })
+    // Handle suggestion acceptance
+    const handleAcceptSuggestion = useCallback((suggestionIndex = null) => {
+        const suggestion = acceptSuggestion(suggestionIndex)
+        if (suggestion && editor) {
+            // Insert the suggestion at the current cursor position
+            const currentText = editor.getText()
+            const cursorPosition = editor.state.selection.anchor
+            
+            // Add the suggestion with a space
+            const suggestionText = ` ${suggestion}`
+            editor.commands.insertContent(suggestionText)
         }
+    }, [acceptSuggestion, editor])
 
-        setActiveParagraphId(paragraphId)
-        
-        // Fetch suggestions for this paragraph
-        fetchSuggestions(paragraphId, paragraph.text)
-    }, [paragraphs, fetchSuggestions])
+    // Handle suggestion rejection
+    const handleRejectSuggestion = useCallback(() => {
+        hideSuggestions()
+    }, [hideSuggestions])
 
-    // Handle suggestion actions
-    const handleAcceptSuggestion = useCallback((suggestion) => {
-        acceptSuggestion(activeParagraphId, suggestion.id)
-        console.log("Suggestion accepted:", suggestion)
-    }, [activeParagraphId, acceptSuggestion])
-
-    const handleRejectSuggestion = useCallback((suggestion) => {
-        rejectSuggestion(activeParagraphId, suggestion.id)
-        console.log("Suggestion rejected:", suggestion)
-    }, [activeParagraphId, rejectSuggestion])
-
-    const handleApplySuggestion = useCallback((suggestion) => {
-        if (!editor) return
-        
-        const paragraph = paragraphs.find(p => p.id === activeParagraphId)
-        if (!paragraph) return
-
-        const appliedText = applySuggestion(activeParagraphId, suggestion.id, paragraph.text)
-        
-        // Update the editor content with the applied suggestion
-        const currentContent = editor.getHTML()
-        const tempDiv = document.createElement("div")
-        tempDiv.innerHTML = currentContent
-        
-        const paragraphElements = tempDiv.querySelectorAll("p")
-        const targetParagraph = paragraphElements[paragraph.index]
-        
-        if (targetParagraph) {
-            targetParagraph.innerHTML = appliedText
-            editor.commands.setContent(tempDiv.innerHTML)
-        }
-        
-        console.log("Suggestion applied:", suggestion)
-    }, [activeParagraphId, applySuggestion, editor, paragraphs])
-
-    // Initialize paragraphs when content changes
-    useEffect(() => {
-        if (content) {
-            updateParagraphs(content)
-        }
-    }, [content, updateParagraphs])
+    // Handle suggestion navigation
+    const handleNavigateSuggestions = useCallback((direction) => {
+        navigateSuggestions(direction)
+    }, [navigateSuggestions])
 
     if (!editor) {
         return null
@@ -270,47 +247,39 @@ export function EnhancedTipTapEditor({
                 {isLoadingSuggestions && (
                     <div className="ml-auto flex items-center gap-2 text-sm text-muted-foreground">
                         <div className="animate-spin h-4 w-4 border-2 border-primary border-t-transparent rounded-full" />
-                        Getting suggestions...
+                        Getting AI suggestions...
                     </div>
                 )}
+
+                {/* Debug button for testing */}
+                <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                        console.log('Test button clicked - triggering suggestions')
+                        fetchLiveSuggestions("Once upon a time", 15)
+                    }}
+                >
+                    Test Suggestions
+                </Button>
             </div>
 
-            {/* Editor with Suggestions */}
+            {/* Editor with Live Suggestions */}
             <div className="flex-1 overflow-auto relative" ref={editorRef}>
                 <div className="max-w-4xl mx-auto relative">
                     <EditorContent editor={editor} />
 
-                    {/* Render paragraphs with click handlers */}
-                    {paragraphs.map((paragraph) => {
-                        const suggestions = getSuggestions(paragraph.id)
-                        const analysis = getParagraphAnalysis(paragraph.id)
-                        
-                        return (
-                            <div key={paragraph.id}>
-                                {/* Paragraph click area for suggestions */}
-                                <div
-                                    className="cursor-pointer hover:bg-muted/20 rounded p-1 -m-1 transition-colors"
-                                    onClick={(e) => handleParagraphClick(paragraph.id, e)}
-                                    title="Click for AI suggestions"
-                                >
-                                    {/* This will be handled by the editor content */}
-                                </div>
-                                
-                                {/* Show suggestion overlay for active paragraph */}
-                                {activeParagraphId === paragraph.id && suggestions && (
-                                    <SuggestionOverlay
-                                        paragraphId={paragraph.id}
-                                        paragraphText={paragraph.text}
-                                        position={suggestionPosition}
-                                        onAccept={handleAcceptSuggestion}
-                                        onReject={handleRejectSuggestion}
-                                        onApplySuggestion={handleApplySuggestion}
-                                        isVisible={true}
-                                    />
-                                )}
-                            </div>
-                        )
-                    })}
+                    {/* Live Suggestions Overlay (GitHub Copilot style) */}
+                    <LiveSuggestionsOverlay
+                        suggestions={suggestions}
+                        isLoading={isLoadingSuggestions}
+                        showSuggestions={showSuggestions}
+                        selectedIndex={selectedSuggestionIndex}
+                        onAccept={handleAcceptSuggestion}
+                        onReject={handleRejectSuggestion}
+                        onNavigate={handleNavigateSuggestions}
+                        position={suggestionPosition}
+                    />
                 </div>
             </div>
         </div>

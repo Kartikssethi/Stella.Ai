@@ -56,9 +56,23 @@ export default function Login() {
     }
   }
 
-  const handleGoogleLogin = () => {
-    setIsGoogleLoading(true)
-    window.location.href = `${process.env.NEXT_PUBLIC_APP_URL}/api/auth/oauth/google`
+  const handleGoogleLogin = async () => {
+    try {
+      setIsGoogleLoading(true)
+      const { error } = await authClient.signIn.social({
+        provider: 'google',
+        callbackURL: '/dashboard'
+      })
+      
+      if (error) {
+        setError(error.message || 'Google login failed')
+        setIsGoogleLoading(false)
+      }
+    } catch (err) {
+      console.error('Google login error:', err)
+      setError('Google login failed. Please try again.')
+      setIsGoogleLoading(false)
+    }
   }
 
   return (
